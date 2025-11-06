@@ -1,0 +1,5 @@
+{
+  "name": "Gemini Dubbing Studio",
+  "description": "An application to dub pre-recorded audio using AI-powered voices from the Gemini API. Users provide an audio file and a script, and the app generates a high-quality dubbed version in the selected voice.",
+  "requestFramePermissions": []
+}
