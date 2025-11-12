@@ -8,7 +8,8 @@ interface DubbedVideoPlayerProps {
 const DubbedVideoPlayer: React.FC<DubbedVideoPlayerProps> = ({ videoSrc, audioSrc }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const animationFrameId = useRef<number>();
+  // FIX: Initialize useRef with null to address the "Expected 1 arguments" error and improve type safety.
+  const animationFrameId = useRef<number | null>(null);
 
   // Sync loop to keep audio and video tightly coupled
   const syncLoop = () => {
@@ -33,7 +34,10 @@ const DubbedVideoPlayer: React.FC<DubbedVideoPlayerProps> = ({ videoSrc, audioSr
       audioRef.current.play();
 
       // Start the sync loop
-      cancelAnimationFrame(animationFrameId.current!);
+      // FIX: Check if there is an animation frame to cancel to avoid runtime errors.
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+      }
       animationFrameId.current = requestAnimationFrame(syncLoop);
     }
   };
@@ -42,7 +46,10 @@ const DubbedVideoPlayer: React.FC<DubbedVideoPlayerProps> = ({ videoSrc, audioSr
     if (audioRef.current) {
       audioRef.current.pause();
       // Stop the sync loop
-      cancelAnimationFrame(animationFrameId.current!);
+      // FIX: Check if there is an animation frame to cancel to avoid runtime errors.
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+      }
     }
   };
 
@@ -65,7 +72,10 @@ const DubbedVideoPlayer: React.FC<DubbedVideoPlayerProps> = ({ videoSrc, audioSr
         videoElement.removeEventListener('pause', handlePauseOrEnd);
         videoElement.removeEventListener('ended', handlePauseOrEnd);
         videoElement.removeEventListener('seeked', handleSeeked);
-        cancelAnimationFrame(animationFrameId.current!); // Cleanup on unmount
+        // FIX: Check if there is an animation frame to cancel to avoid runtime errors on unmount.
+        if (animationFrameId.current) {
+          cancelAnimationFrame(animationFrameId.current); // Cleanup on unmount
+        }
       };
     }
   }, []);

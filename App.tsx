@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { generateSpeech, transcribeAndTranslate } from './services/geminiService';
 import { Voice, VOICES, TimedChunk } from './types';
 import AudioPlayer from './components/AudioPlayer';
@@ -370,56 +370,53 @@ const App: React.FC = () => {
     }
   }, [originalMediaUrl, dubbedAudioUrl]);
 
-  useEffect(() => {
-    const autoTranslate = async () => {
-      if (!sourceFile) {
-        return;
+  const handleProcessMedia = useCallback(async () => {
+    if (!sourceFile) {
+      return;
+    }
+    setIsTranslating(true);
+    setTranslationError(null);
+    setError(null);
+    setTimedScript([]);
+    setCustomDialog({});
+    setSpeakerVoiceMap({});
+    setMutedSegments({});
+
+    try {
+      // For the AI prompt, use the common English name for Malay for best results,
+      // even if the UI shows "Bahasa Malaysia".
+      const langName = targetLanguage === 'ms'
+        ? 'Malay'
+        : LANGUAGES[targetLanguage] || 'the selected language';
+      const translatedScript = await transcribeAndTranslate(sourceFile, langName);
+      setTimedScript(translatedScript);
+
+      const initialDialog = translatedScript.reduce((acc, chunk, index) => {
+        acc[index] = chunk.text;
+        return acc;
+      }, {} as Record<number, string>);
+      setCustomDialog(initialDialog);
+
+      const speakers = Array.from(new Set(translatedScript.map(chunk => chunk.speaker))).sort();
+      const initialVoiceMap = speakers.reduce((acc, speakerId, index) => {
+        // Assign voices cyclically
+        acc[speakerId] = VOICES[index % VOICES.length].id;
+        return acc;
+      }, {} as Record<string, string>);
+      setSpeakerVoiceMap(initialVoiceMap);
+
+    } catch (err: any) {
+      let errorMessage = "Failed to translate. Please try again.";
+      if (err && typeof err.message === 'string') {
+        errorMessage = err.message;
+      } else if (err) {
+        // The error might be a complex object. Stringify it for display.
+        errorMessage = `An unexpected error occurred during translation: ${JSON.stringify(err, null, 2)}`;
       }
-      setIsTranslating(true);
-      setTranslationError(null);
-      setError(null);
-      setTimedScript([]);
-      setCustomDialog({});
-      setSpeakerVoiceMap({});
-      setMutedSegments({});
-
-      try {
-        // For the AI prompt, use the common English name for Malay for best results,
-        // even if the UI shows "Bahasa Malaysia".
-        const langName = targetLanguage === 'ms' 
-          ? 'Malay' 
-          : LANGUAGES[targetLanguage] || 'the selected language';
-        const translatedScript = await transcribeAndTranslate(sourceFile, langName);
-        setTimedScript(translatedScript);
-
-        const initialDialog = translatedScript.reduce((acc, chunk, index) => {
-          acc[index] = chunk.text;
-          return acc;
-        }, {} as Record<number, string>);
-        setCustomDialog(initialDialog);
-    
-        const speakers = Array.from(new Set(translatedScript.map(chunk => chunk.speaker))).sort();
-        const initialVoiceMap = speakers.reduce((acc, speakerId, index) => {
-            // Assign voices cyclically
-            acc[speakerId] = VOICES[index % VOICES.length].id;
-            return acc;
-        }, {} as Record<string, string>);
-        setSpeakerVoiceMap(initialVoiceMap);
-
-      } catch (err: any) {
-        let errorMessage = "Failed to translate. Please try again.";
-        if (err && typeof err.message === 'string') {
-          errorMessage = err.message;
-        } else if (err) {
-          // The error might be a complex object. Stringify it for display.
-          errorMessage = `An unexpected error occurred during translation: ${JSON.stringify(err, null, 2)}`;
-        }
-        setTranslationError(errorMessage);
-      } finally {
-        setIsTranslating(false);
-      }
-    };
-    autoTranslate();
+      setTranslationError(errorMessage);
+    } finally {
+      setIsTranslating(false);
+    }
   }, [sourceFile, targetLanguage]);
 
   return (
@@ -487,21 +484,29 @@ const App: React.FC = () => {
 
             <div className="flex flex-col space-y-4 flex-grow">
               <div className='space-y-2'>
-                <label htmlFor="language" className="flex items-center space-x-2 text-sm font-medium text-gray-300">
-                    <span>Translate from Source Media</span>
-                    {isTranslating && <Spinner />}
+                <label htmlFor="language" className="block text-sm font-medium text-gray-300">
+                    Translate & Transcribe
                 </label>
-                <select
-                  id="language"
-                  className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                  value={targetLanguage}
-                  onChange={(e) => setTargetLanguage(e.target.value)}
-                  disabled={isTranslating}
-                >
-                  {Object.entries(LANGUAGES).map(([code, name]) => (
-                    <option key={code} value={code}>{name}</option>
-                  ))}
-                </select>
+                <div className="flex items-center space-x-2">
+                  <select
+                    id="language"
+                    className="flex-grow bg-gray-700 border border-gray-600 rounded-md p-2 h-10 text-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                    value={targetLanguage}
+                    onChange={(e) => setTargetLanguage(e.target.value)}
+                    disabled={isTranslating || !sourceFile}
+                  >
+                    {Object.entries(LANGUAGES).map(([code, name]) => (
+                      <option key={code} value={code}>{name}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleProcessMedia}
+                    disabled={isTranslating || !sourceFile}
+                    className="flex-shrink-0 flex justify-center items-center h-10 px-4 font-semibold rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all"
+                  >
+                    {isTranslating ? <Spinner /> : 'Process'}
+                  </button>
+                </div>
                 {translationError && <p className="text-red-400 text-sm mt-2 whitespace-pre-wrap">{translationError}</p>}
               </div>
 
@@ -572,7 +577,7 @@ const App: React.FC = () => {
                         ))
                     ) : (
                         <div className="flex items-center justify-center h-full">
-                            <p className="text-gray-500 text-sm">Upload a file to generate a script...</p>
+                            <p className="text-gray-500 text-sm">Upload a file and click "Process"...</p>
                         </div>
                     )}
                 </div>
